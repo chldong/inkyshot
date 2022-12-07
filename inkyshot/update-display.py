@@ -1,3 +1,5 @@
+# -*- coding: UTF-8 -*-
+
 import json
 import logging
 import math
@@ -20,50 +22,6 @@ from PIL import Image, ImageFont, ImageDraw, ImageOps
 import arrow
 import geocoder
 import requests
-
-icon_map = {
-    "clearsky": 1,
-    "cloudy": 4,
-    "fair": 2,
-    "fog": 15,
-    "heavyrain": 10,
-    "heavyrainandthunder": 11,
-    "heavyrainshowers": 41,
-    "heavyrainshowersandthunder": 25,
-    "heavysleet": 48,
-    "heavysleetandthunder": 32,
-    "heavysleetshowers": 43,
-    "heavysleetshowersandthunder": 27,
-    "heavysnow": 50,
-    "heavysnowandthunder": 34,
-    "heavysnowshowers": 45,
-    "heavysnowshowersandthunder": 29,
-    "lightrain": 46,
-    "lightrainandthunder": 30,
-    "lightrainshowers": 40,
-    "lightrainshowersandthunder": 24,
-    "lightsleet": 47,
-    "lightsleetandthunder": 31,
-    "lightsleetshowers": 42,
-    "lightsnow": 49,
-    "lightsnowandthunder": 33,
-    "lightsnowshowers": 44,
-    "lightssleetshowersandthunder": 26,
-    "lightssnowshowersandthunder": 28,
-    "partlycloudy": 3,
-    "rain": 9,
-    "rainandthunder": 22,
-    "rainshowers": 5,
-    "rainshowersandthunder": 6,
-    "sleet": 12,
-    "sleetandthunder": 23,
-    "sleetshowers": 7,
-    "sleetshowersandthunder": 20,
-    "snow": 13,
-    "snowandthunder": 14,
-    "snowshowers": 8,
-    "snowshowersandthunder": 21,
-}
 
 def create_mask(source):
     """Create a transparency mask to draw images in grayscale
@@ -111,19 +69,19 @@ def draw_weather(weather, img, scale):
             time_of_day = 'd'
         elif symbol_cycle == 'night':
             time_of_day = 'n'
-    icon_filename = f"{icon_map[icon_name]:02}{time_of_day}.png"
-    filepath = Path(__file__).parent / 'weather-icons' / icon_filename
+    icon_filename = f"{weather['icon']}.png"
+    filepath = Path(__file__).parent / 'pngs' / icon_filename
     icon_image = Image.open(filepath)
     icon_mask = create_mask(icon_image)
     # Draw the weather icon
     if WEATHER_INVERT and WAVESHARE:
         logging.info("Inverting Weather Icon")
         icon = Image.new('1', (100, 100), 255)
-        icon.paste(icon_image, (0,0), icon_mask)
+        icon.paste(icon_image, (0,0), icon_image)
         icon_inverted = ImageOps.invert(icon.convert('RGB'))
         img.paste(icon_inverted, (120, 3))
     else:
-        img.paste(icon_image, (120, 3), icon_mask)
+        img.paste(icon_image, (120, 3), icon_image)
     return img
 
 def get_current_display():
@@ -143,7 +101,7 @@ def get_current_display():
 
 def get_location():
     """Return coordinate and location info based on IP address"""
-    url = "https://ipinfo.io"
+    url = "https://api.ipgeolocation.io/ipgeo?apiKey=e1b636db453240fd88fd53ed93ef91e3"
     headers = {"Accept": "application/json"}
     try:
         response = requests.get(url, headers=headers)
@@ -157,9 +115,8 @@ def get_location():
 def get_weather(lat: float, lon: float):
     """Return weather report for the next 24 hours"""
     # Truncate all geographical coordinates to max 4 decimals to respect API's policy
-    url = f"https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={lat:.4f}&lon={lon:.4f}"
+    url = f"https://devapi.qweather.com/v7/weather/24h?location=116.70,38.04&key=944db0245a85422abc58982bbdd3fbb7&lang=en"
     headers = {
-        "Accept": "application/json",
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.135 Safari/537.36"
     }
     logging.info("Retrieving weather forecast")
@@ -168,21 +125,23 @@ def get_weather(lat: float, lon: float):
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             data = response.json()
-            timeseries = data['properties']['timeseries']
+            timeseries = data['hourly']
             now = arrow.utcnow()
             tomorrow = now.shift(hours=+24)
             weather_24hours = []
             for t in timeseries:
-                tm = arrow.get(t['time'])
+                tm = arrow.get(t['fxTime'])
                 if tm < tomorrow:
-                    temp = t['data']['instant']['details']['air_temperature']
-                    humid = t['data']['instant']['details']['relative_humidity']
-                    symbol = t['data']['next_1_hours']['summary']['symbol_code']
+                    temp = t['temp']
+                    humid = t['humidity']
+                    symbol = t['text']
+                    icon = t['icon']
                     weather_24hours.append({
                         'time': tm,
                         'temperature': temp,
                         'humidity': humid,
                         'symbol': symbol,
+                        'icon': icon,
                     })
             weather_24hours = sorted(weather_24hours, key=lambda x: x['time'])
             weather = [x for x in weather_24hours if x['time'] <= now.shift(hours=+1)][-1]
@@ -228,7 +187,7 @@ def temp_to_str(temp, scale):
     """Prepare the temperature to draw based on the defined scale: Celcius or Fahrenheit"""
     if scale == 'F':
         temp = temp * 9/5 + 32
-    return f"{temp:.1f}"
+    return temp
 
 # Read the preset environment variables and overwrite the default ones
 if "DEBUG" in os.environ:
@@ -239,7 +198,7 @@ else:
 # Assume a default font if none set
 FONT_SELECTED = AmaticSC
 if "FONT" in os.environ:
-    FONT_SELECTED = locals()[os.environ["FONT"]]
+    FONT_SELECTED = os.environ["FONT"]
 
 FONT_SIZE = 24
 if "FONT_SIZE" in os.environ:
@@ -334,7 +293,7 @@ if target_display == 'weather':
     # If no address or latitute / longitude are found, retrieve location via IP address lookup
     if not LAT or not LONG:
         location = get_location()
-        [LAT, LONG] = [float(x) for x in location['loc'].split(',')]
+        [LAT, LONG] = [float(location['latitude']),float(location['longitude'])]
     weather = get_weather(LAT, LONG)
     # Set latitude and longituted as environment variables for consecutive calls
     os.environ['LATLONG'] = f"{LAT},{LONG}"
@@ -352,21 +311,21 @@ elif target_display == 'quote':
     elif message is None:
         try:
             response = requests.get(
-                f"https://quotes.rest/qod?category={CATEGORY}&language={LANGUAGE}",
+                f"https://www.mxnzp.com/api/daily_word/recommend?count=1&app_id=q6poeljklwrih9hd&app_secret=SFhvVGh4bitiUnd1VWZkcTlldUJuZz09",
                 headers={"Accept" : "application/json"}
             )
             data = response.json()
-            message = data['contents']['quotes'][0]['quote']
+            message = data['data'][0]['content']
         except requests.exceptions.RequestException as err:
             logging.error(err)
-            FONT_SIZE = 25
-            message = "Sorry folks, today's quote has gone walkies :("
+            FONT_SIZE = 20
+            message = "对不起，今天没有新消息 :("
 
-    logging.info("Message: %s", message)
+    logging.info("Message: %s", u"message")
     # Work out what size font is required to fit this message on the display
     message_does_not_fit = True
 
-    test_character = "a"
+    test_character = "永"
     if "TEST_CHARACTER" in os.environ:
         test_character = os.environ['TEST_CHARACTER']
 
@@ -375,9 +334,9 @@ elif target_display == 'quote':
         message_width = 0
         FONT_SIZE -= 1
 
-        if FONT_SIZE <= 17:
-            FONT_SIZE = 8
-            FONT = ImageFont.truetype("/usr/app/fonts/Grand9KPixel.ttf", FONT_SIZE)
+        if FONT_SIZE <= 8:
+            FONT_SIZE = 24
+            FONT = ImageFont.truetype("/usr/app/fonts/DottedSongtiDiamondRegular.otf", FONT_SIZE)
 
         # We're using the test character here to work out how many characters
         # can fit on the display when using the chosen font

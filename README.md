@@ -1,4 +1,4 @@
-# Inkyshot - a shot of inspiration to start the day
+# Inkyshot - 本地化版本
 
 ![](https://raw.githubusercontent.com/balena-labs-projects/inkyshot/master/assets/header-photo.jpg)
 
