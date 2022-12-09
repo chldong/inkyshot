@@ -5,36 +5,15 @@ import logging
 import math
 from pathlib import Path
 import os
-from os import environ
 import sys
 import textwrap
-import time
 
 from font_amatic_sc import AmaticSC
-from font_caladea import Caladea
 from font_fredoka_one import FredokaOne
-from font_hanken_grotesk import HankenGrotesk
-from font_intuitive import Intuitive
-from font_roboto import Roboto
-from font_source_sans_pro import SourceSansPro
-from font_source_serif_pro import SourceSerifPro
 from PIL import Image, ImageFont, ImageDraw, ImageOps
 import arrow
 import geocoder
 import requests
-
-def create_mask(source):
-    """Create a transparency mask to draw images in grayscale
-    """
-    logging.info("Creating a transparency mask for the image")
-    mask_image = Image.new("1", source.size)
-    w, h = source.size
-    for x in range(w):
-        for y in range(h):
-            p = source.getpixel((x, y))
-            if p in [BLACK, WHITE]:
-                mask_image.putpixel((x, y), 255)
-    return mask_image
 
 # Declare non pip fonts here ** Note: ttf files need to be in the /fonts dir of application repo
 Grand9KPixel = "/usr/app/fonts/Grand9KPixel.ttf"
@@ -47,41 +26,31 @@ def draw_weather(weather, img, scale):
     date_font = ImageFont.truetype(WEATHER_FONT, 18)
     draw.text((3, 3), today, BLACK, font=date_font)
     # Draw current temperature to right of today
-    temp_font = ImageFont.truetype(WEATHER_FONT, 24)
-    draw.text((3, 30), f"{temp_to_str(weather['temperature'], scale)}°", BLACK, font=temp_font)
+    temp_font = ImageFont.truetype(WEATHER_FONT, 30)
+    draw.text((3, 30), f"Now {temp_to_str(weather['temperature'], scale)}°", BLACK, font=temp_font)
     # Draw today's high and low temps on left side below date
     small_font = ImageFont.truetype(WEATHER_FONT, 14)
     draw.text(
         (3, 72),
-        f"{temp_to_str(weather['min_temp'], scale)}° - {temp_to_str(weather['max_temp'], scale)}°",
+        f"24H {temp_to_str(weather['min_temp'], scale)}° to {temp_to_str(weather['max_temp'], scale)}°",
         BLACK,
         font=small_font,
     )
     # Draw today's max humidity on left side below temperatures
-    draw.text((3, 87), f"{weather['max_humidity']}%", BLACK, font=small_font)
+    draw.text((3, 92), f"RH {weather['min_humidity']}% to {weather['max_humidity']}%", BLACK, font=small_font)
     # Load weather icon
-    icon_name = weather['symbol'].split('_')[0]
-    time_of_day = ''
-    # Couple of symbols have different icons for day and night. Check if this symbol is one of them.
-    if len(weather['symbol'].split('_')) > 1:
-        symbol_cycle = weather['symbol'].split('_')[1]
-        if symbol_cycle == 'day':
-            time_of_day = 'd'
-        elif symbol_cycle == 'night':
-            time_of_day = 'n'
     icon_filename = f"{weather['icon']}.png"
     filepath = Path(__file__).parent / 'pngs' / icon_filename
     icon_image = Image.open(filepath)
-    icon_mask = create_mask(icon_image)
     # Draw the weather icon
     if WEATHER_INVERT and WAVESHARE:
         logging.info("Inverting Weather Icon")
         icon = Image.new('1', (100, 100), 255)
         icon.paste(icon_image, (0,0), icon_image)
         icon_inverted = ImageOps.invert(icon.convert('RGB'))
-        img.paste(icon_inverted, (120, 3))
+        img.paste(icon_inverted, (120, -5))
     else:
-        img.paste(icon_image, (120, 3), icon_image)
+        img.paste(icon_image, (120, -5), icon_image)
     return img
 
 def get_current_display():
@@ -149,6 +118,7 @@ def get_weather(lat: float, lon: float):
             weather['max_temp'] = max(temperatures)
             weather['min_temp'] = min(temperatures)
             weather['max_humidity'] = max([x['humidity'] for x in weather_24hours if x['time'] <= now.shift(days=+1)])
+            weather['min_humidity'] = min([x['humidity'] for x in weather_24hours if x['time'] <= now.shift(days=+1)])
     except requests.exceptions.RequestException as err:
         logging.error(err)
     return weather
@@ -325,7 +295,7 @@ elif target_display == 'quote':
     # Work out what size font is required to fit this message on the display
     message_does_not_fit = True
 
-    test_character = "永"
+    test_character = "a"
     if "TEST_CHARACTER" in os.environ:
         test_character = os.environ['TEST_CHARACTER']
 
